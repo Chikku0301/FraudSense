@@ -1,0 +1,42 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+dist/
+build/
+*.egg
+.pytest_cache/
+
+# Virtual environments
+venv/
+.venv/
+
+# Environment files
+.env
+.env.local
+
+# Data (large CSV files must never be committed)
+data/*.csv
+
+# Trained model artifacts
+backend/models_store/*.pkl
+backend/models_store/*.json
+backend/models_store/incoming_pool.csv
+
+# SQLite fallback database
+*.db
+
+# Node.js
+node_modules/
+frontend/dist/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
