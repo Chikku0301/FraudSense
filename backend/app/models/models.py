@@ -1,87 +1,330 @@
 from datetime import datetime
-from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Text, JSON
+
+# SQLAlchemy column types used to define the database schema.
+from sqlalchemy import (
+    Column,
+    Integer,
+    String,
+    Float,
+    DateTime,
+    ForeignKey,
+    Text,
+    JSON,
+)
+
+# relationship() creates connections between related database tables.
 from sqlalchemy.orm import relationship
+
+# Base is the SQLAlchemy declarative base from which all models inherit.
 from backend.app.database import Base
 
+
+# ============================================================
+# USER MODEL
+# ============================================================
+# Stores authentication and role information for application users.
+# Users can be merchants, analysts, or administrators.
 class User(Base):
     __tablename__ = "users"
 
+    # Primary key for uniquely identifying each user.
     id = Column(Integer, primary_key=True, index=True)
+
+    # User's email address.
+    # unique=True prevents multiple accounts from using the same email.
     email = Column(String, unique=True, index=True, nullable=False)
+
+    # Stores the hashed password rather than the plain-text password.
     hashed_password = Column(String, nullable=False)
-    role = Column(String, nullable=False)  # merchant | analyst | admin
+
+    # Defines the user's access level.
+    # Possible roles: merchant | analyst | admin
+    role = Column(String, nullable=False)
+
+    # User's full display name.
     full_name = Column(String, nullable=False)
-    merchant_name = Column(String, nullable=True)  # only for merchant role
+
+    # Name of the merchant associated with the user.
+    # This is only applicable to merchant accounts.
+    merchant_name = Column(String, nullable=True)
+
+    # Timestamp indicating when the user account was created.
     created_at = Column(DateTime, default=datetime.utcnow)
 
+    # --------------------------------------------------------
     # Relationships
-    assigned_cases = relationship("Case", back_populates="assigned_analyst")
-    audit_logs = relationship("AuditLog", back_populates="actor")
+    # --------------------------------------------------------
+
+    # Cases assigned to this user when the user is an analyst.
+    assigned_cases = relationship(
+        "Case",
+        back_populates="assigned_analyst"
+    )
+
+    # Audit actions performed by this user.
+    audit_logs = relationship(
+        "AuditLog",
+        back_populates="actor"
+    )
 
 
+# ============================================================
+# TRANSACTION MODEL
+# ============================================================
+# Stores incoming credit-card transactions that are processed
+# by the fraud detection pipeline.
 class Transaction(Base):
     __tablename__ = "transactions"
 
+    # Unique identifier for each transaction.
     id = Column(Integer, primary_key=True, index=True)
-    merchant_id = Column(Integer, ForeignKey("users.id"), nullable=True)
-    source_row_id = Column(Integer, nullable=True)  # References incoming_pool.csv row index
+
+    # ID of the merchant/user associated with the transaction.
+    # Nullable because some transactions may not have a merchant.
+    merchant_id = Column(
+        Integer,
+        ForeignKey("users.id"),
+        nullable=True
+    )
+
+    # Original row number from incoming_pool.csv.
+    # This allows the system to trace a simulated transaction
+    # back to its source dataset row.
+    source_row_id = Column(Integer, nullable=True)
+
+    # Original transaction time/offset from the dataset.
     time_offset = Column(Float, nullable=False)
+
+    # Monetary value of the transaction.
     amount = Column(Float, nullable=False)
-    raw_features = Column(JSON, nullable=False)  # Contains V1-V28 vectors
-    status = Column(String, nullable=False)  # pending | cleared | flagged | confirmed_fraud | confirmed_legit
-    true_class = Column(Integer, nullable=False)  # Ground truth: 1 for fraud, 0 for legit
+
+    # Stores the original V1-V28 feature vector as JSON.
+    # JSON is useful here because the number of ML features can
+    # be stored together as a structured object.
+    raw_features = Column(JSON, nullable=False)
+
+    # Current lifecycle state of the transaction.
+    #
+    # Possible values:
+    # pending
+    # cleared
+    # flagged
+    # confirmed_fraud
+    # confirmed_legit
+    status = Column(String, nullable=False)
+
+    # Ground-truth label from the original dataset.
+    # 1 = fraudulent transaction
+    # 0 = legitimate transaction
+    true_class = Column(Integer, nullable=False)
+
+    # Timestamp indicating when the transaction entered the system.
     ingested_at = Column(DateTime, default=datetime.utcnow)
 
+    # --------------------------------------------------------
     # Relationships
-    merchant = relationship("User", foreign_keys=[merchant_id])
-    fraud_assessment = relationship("FraudAssessment", back_populates="transaction", uselist=False)
-    case = relationship("Case", back_populates="transaction", uselist=False)
-    audit_logs = relationship("AuditLog", back_populates="transaction")
+    # --------------------------------------------------------
+
+    # Connects the transaction to its merchant/user.
+    merchant = relationship(
+        "User",
+        foreign_keys=[merchant_id]
+    )
+
+    # One transaction has one fraud assessment.
+    # uselist=False makes this a one-to-one relationship.
+    fraud_assessment = relationship(
+        "FraudAssessment",
+        back_populates="transaction",
+        uselist=False
+    )
+
+    # One transaction can have one associated investigation case.
+    case = relationship(
+        "Case",
+        back_populates="transaction",
+        uselist=False
+    )
+
+    # A transaction can have multiple audit-log entries.
+    audit_logs = relationship(
+        "AuditLog",
+        back_populates="transaction"
+    )
 
 
+# ============================================================
+# FRAUD ASSESSMENT MODEL
+# ============================================================
+# Stores the output generated by the ML fraud detection pipeline
+# for a transaction.
 class FraudAssessment(Base):
     __tablename__ = "fraud_assessments"
 
+    # Unique identifier for the fraud assessment.
     id = Column(Integer, primary_key=True, index=True)
-    transaction_id = Column(Integer, ForeignKey("transactions.id"), nullable=False)
-    fraud_score = Column(Integer, nullable=False)  # 0 to 100
-    fraud_probability = Column(Float, nullable=False)  # 0.0 to 1.0
-    model_decision = Column(String, nullable=False)  # clear | flag_for_review | block
-    shap_explanation = Column(JSON, nullable=False)  # Top contributing features
+
+    # Links the assessment to the transaction that was evaluated.
+    transaction_id = Column(
+        Integer,
+        ForeignKey("transactions.id"),
+        nullable=False
+    )
+
+    # Final fraud risk score represented on a 0-100 scale.
+    fraud_score = Column(Integer, nullable=False)
+
+    # Raw model probability represented between 0.0 and 1.0.
+    fraud_probability = Column(Float, nullable=False)
+
+    # Decision produced by the fraud detection system.
+    #
+    # Possible values:
+    # clear
+    # flag_for_review
+    # block
+    model_decision = Column(String, nullable=False)
+
+    # Stores SHAP explanations showing which features contributed
+    # most strongly to the model's prediction.
+    shap_explanation = Column(JSON, nullable=False)
+
+    # Version of the ML model used for this assessment.
+    # Useful for tracking which model generated a prediction.
     model_version = Column(String, nullable=False)
+
+    # Timestamp indicating when the assessment was created.
     created_at = Column(DateTime, default=datetime.utcnow)
 
+    # --------------------------------------------------------
     # Relationships
-    transaction = relationship("Transaction", back_populates="fraud_assessment")
+    # --------------------------------------------------------
+
+    # Connects this fraud assessment back to its transaction.
+    transaction = relationship(
+        "Transaction",
+        back_populates="fraud_assessment"
+    )
 
 
+# ============================================================
+# CASE MODEL
+# ============================================================
+# Represents an investigation created when a transaction
+# requires human analyst review.
 class Case(Base):
     __tablename__ = "cases"
 
+    # Unique identifier for the investigation case.
     id = Column(Integer, primary_key=True, index=True)
-    transaction_id = Column(Integer, ForeignKey("transactions.id"), nullable=False)
-    assigned_analyst_id = Column(Integer, ForeignKey("users.id"), nullable=True)
-    status = Column(String, default="open")  # open | investigating | resolved
-    resolution = Column(String, nullable=True)  # fraud_confirmed | false_positive
+
+    # Transaction being investigated.
+    transaction_id = Column(
+        Integer,
+        ForeignKey("transactions.id"),
+        nullable=False
+    )
+
+    # Analyst assigned to investigate the case.
+    # Nullable because a case may initially be unassigned.
+    assigned_analyst_id = Column(
+        Integer,
+        ForeignKey("users.id"),
+        nullable=True
+    )
+
+    # Current investigation status.
+    #
+    # Possible values:
+    # open
+    # investigating
+    # resolved
+    status = Column(String, default="open")
+
+    # Final outcome of the investigation.
+    #
+    # Possible values:
+    # fraud_confirmed
+    # false_positive
+    resolution = Column(String, nullable=True)
+
+    # Analyst's investigation notes.
     notes = Column(Text, nullable=True)
+
+    # Timestamp when the case was created.
     created_at = Column(DateTime, default=datetime.utcnow)
+
+    # Timestamp when the case was resolved.
+    # Remains NULL while the case is still active.
     resolved_at = Column(DateTime, nullable=True)
 
+    # --------------------------------------------------------
     # Relationships
-    transaction = relationship("Transaction", back_populates="case")
-    assigned_analyst = relationship("User", back_populates="assigned_cases")
+    # --------------------------------------------------------
+
+    # Connects the case to the transaction being investigated.
+    transaction = relationship(
+        "Transaction",
+        back_populates="case"
+    )
+
+    # Connects the case to the analyst responsible for it.
+    assigned_analyst = relationship(
+        "User",
+        back_populates="assigned_cases"
+    )
 
 
+# ============================================================
+# AUDIT LOG MODEL
+# ============================================================
+# Records important actions performed within the application.
+# This provides traceability for security, compliance, and
+# debugging purposes.
 class AuditLog(Base):
     __tablename__ = "audit_logs"
 
+    # Unique identifier for each audit event.
     id = Column(Integer, primary_key=True, index=True)
-    actor_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    transaction_id = Column(Integer, ForeignKey("transactions.id"), nullable=True)
+
+    # User who performed the action.
+    actor_id = Column(
+        Integer,
+        ForeignKey("users.id"),
+        nullable=False
+    )
+
+    # Transaction associated with the action.
+    # Nullable because some actions may not relate to a
+    # particular transaction.
+    transaction_id = Column(
+        Integer,
+        ForeignKey("transactions.id"),
+        nullable=True
+    )
+
+    # Description/type of action that was performed.
+    # Examples: case_created, case_resolved, transaction_blocked.
     action = Column(String, nullable=False)
+
+    # Additional information about the action.
     notes = Column(Text, nullable=True)
+
+    # Timestamp indicating when the action occurred.
     created_at = Column(DateTime, default=datetime.utcnow)
 
+    # --------------------------------------------------------
     # Relationships
-    actor = relationship("User", back_populates="audit_logs")
-    transaction = relationship("Transaction", back_populates="audit_logs")
+    # --------------------------------------------------------
+
+    # Connects the audit log to the user who performed the action.
+    actor = relationship(
+        "User",
+        back_populates="audit_logs"
+    )
+
+    # Connects the audit log to the related transaction.
+    transaction = relationship(
+        "Transaction",
+        back_populates="audit_logs"
+    )
