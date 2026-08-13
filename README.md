@@ -1,90 +1,423 @@
 # FraudSense — Real-Time Transaction Fraud Detection & Risk Monitoring
 
-FraudSense is a full-stack, production-grade web application representing internal fraud engineering systems used by card networks, payment processors, and banks. It evaluates incoming credit card transactions in real-time, generates human-interpretable feature explanations using SHAP, and triggers automated hold/block responses.
+FraudSense is a full-stack, production-oriented fraud detection platform designed to simulate the internal fraud monitoring systems used by banks, payment processors, and card networks.
+
+The system evaluates credit card transactions in real time, assigns a **0–100 risk score**, explains model decisions using **SHAP**, and automatically triggers appropriate actions such as **hold, review, or block**. It also provides analysts with live transaction monitoring, case management, portfolio analytics, and human-in-the-loop feedback.
 
 ---
 
-## Technical Architecture
+## 🏗️ System Architecture
 
-### Machine Learning Pipeline
-1. **Deterministic Splitting**: Splits the real 150MB credit card transaction dataset (`creditcard.csv`) stratified on class:
-   - **60% Train**: Core model training.
-   - **15% Validation**: Validation parameters, metrics evaluation.
-   - **25% Incoming Pool**: Kept unseen during training; stored at `backend/models_store/incoming_pool.csv` and serves as the sole source of "live simulated" transactions.
-2. **Feature Engineering & Balancing**:
-   - `Amount` and `Time` are scaled using a fitted `StandardScaler` (V1–V28 are PCA-transformed and already scaled).
-   - **SMOTE** is applied only to the Train split to resolve the extreme 0.172% minority class imbalance.
-3. **Hybrid Ensemble Scoring**:
-   - **XGBoost Classifier** (Supervised): Predicts probability of transaction being fraudulent.
-   - **Isolation Forest** (Unsupervised Anomaly Detector): Scores pattern outliers.
-   - **Combined Risk Score**: Calculated as `0.8 * XGBoost + 0.2 * Isolation Forest` (Sigmoid-scaled decision boundaries), mapped to a 0-100 range.
-4. **SHAP TreeExplainability**: Evaluates tree log-odds contribution weights for top-contributing features (V1-V28, Time, Amount).
+FraudSense consists of four major layers:
 
-### System Stack
-- **Frontend**: React (v18), TypeScript, Vite, TailwindCSS, Lucide-React, Recharts, React Hook Form + Zod.
-- **Backend**: Python 3.11, FastAPI, WebSockets (for live transaction stream), SQLAlchemy, SQLite (local fallback) / PostgreSQL (Docker-compose), joblib, shap.
-- **Orchestration**: Docker Compose.
+**Frontend → FastAPI Backend → ML Risk Engine → Database**
+
+The application also uses **WebSockets** to stream newly processed transactions to connected analyst dashboards in real time.
 
 ---
 
-## Setup & Execution
+## 🤖 Machine Learning Pipeline
 
-### Method 1: Local Docker Compose (Recommended)
-Verify that Docker Desktop is running, then execute from the root directory:
+### 1. Deterministic Dataset Splitting
+
+The original `creditcard.csv` dataset (~150 MB) is deterministically divided into three subsets while preserving the fraud/non-fraud class distribution:
+
+- **60% — Training Set:** Used exclusively for model training.
+- **15% — Validation Set:** Used for model evaluation and parameter validation.
+- **25% — Incoming Transaction Pool:** Completely excluded from training and stored at:
+  `backend/models_store/incoming_pool.csv`
+
+The incoming pool acts as the sole source of transactions for the application's **live fraud simulation**.
+
+### 2. Feature Engineering & Class Balancing
+
+The dataset contains the PCA-transformed features `V1–V28`, along with `Time` and `Amount`.
+
+- `Time` and `Amount` are standardized using a fitted `StandardScaler`.
+- `V1–V28` are already PCA-transformed and approximately standardized.
+- **SMOTE** is applied only to the training set to address the severe class imbalance, where fraudulent transactions represent approximately **0.172%** of the dataset.
+
+This prevents information from the validation or incoming pool from leaking into model training.
+
+### 3. Hybrid Fraud Detection Model
+
+FraudSense combines supervised classification with unsupervised anomaly detection.
+
+#### XGBoost — Supervised Detection
+
+The XGBoost classifier learns patterns associated with known fraudulent transactions and produces a probability representing the likelihood of fraud.
+
+#### Isolation Forest — Anomaly Detection
+
+Isolation Forest identifies transactions that deviate significantly from the normal transaction distribution, allowing the system to detect unusual patterns that may not have been explicitly observed during supervised training.
+
+#### Combined Risk Score
+
+The two model outputs are combined into a single risk score:
+
+```text
+Risk = 0.8 × XGBoost Score
+     + 0.2 × Isolation Forest Score
+```
+
+The resulting score is transformed into a **0–100 risk scale**, which is then used to determine the transaction's risk level and recommended action.
+
+### 4. SHAP Explainability
+
+FraudSense uses **SHAP TreeExplainer** to make XGBoost predictions interpretable.
+
+For each transaction, the system identifies the features that contributed most strongly to the model's decision, including:
+
+- `V1–V28`
+- `Time`
+- `Amount`
+
+These contributions are presented through interactive visualizations so analysts can understand **why a transaction received a particular risk score** rather than relying on a black-box prediction.
+
+---
+
+# 🖥️ Technology Stack
+
+### Frontend
+
+- React 18
+- TypeScript
+- Vite
+- Tailwind CSS
+- Lucide React
+- Recharts
+- React Hook Form
+- Zod
+
+### Backend
+
+- Python 3.11
+- FastAPI
+- REST APIs
+- WebSockets
+- SQLAlchemy
+- SQLite — local development fallback
+- PostgreSQL — Docker deployment
+- Joblib
+- SHAP
+
+### Machine Learning
+
+- XGBoost
+- Isolation Forest
+- SMOTE
+- Scikit-learn
+- SHAP
+- Pandas / NumPy
+
+### Infrastructure
+
+- Docker
+- Docker Compose
+- PostgreSQL 15
+
+---
+
+# 🔄 Real-Time Transaction Flow
+
+A typical live transaction follows this flow:
+
+```text
+Incoming Transaction
+        ↓
+FastAPI Backend
+        ↓
+Feature Preprocessing
+        ↓
+XGBoost ─────────┐
+                 ├──→ Hybrid Risk Engine
+Isolation Forest ┘
+        ↓
+Risk Score (0–100)
+        ↓
+Risk Classification
+        ↓
+SHAP Explanation
+        ↓
+Database
+        ↓
+WebSocket Broadcast
+        ↓
+Analyst Dashboard
+```
+
+For simulated transactions, the backend randomly selects an unused transaction from the unseen `incoming_pool.csv`, evaluates it, stores the result, and broadcasts the processed transaction to connected analyst dashboards.
+
+---
+
+# ⚡ Live Transaction Simulation
+
+The **Simulation Console** provides a real-time fraud monitoring experience.
+
+When an analyst clicks **Simulate Live Transaction**:
+
+1. The frontend calls the `/simulate-live` endpoint.
+2. FastAPI selects an unused transaction from `incoming_pool.csv`.
+3. The transaction is preprocessed using the trained scaler.
+4. XGBoost and Isolation Forest generate their respective scores.
+5. The hybrid risk engine calculates the final risk score.
+6. SHAP generates feature-level explanations.
+7. The transaction and prediction are persisted in the database.
+8. The backend broadcasts the result through WebSockets.
+9. All connected analyst dashboards receive the transaction instantly.
+
+This creates a realistic simulation of a continuously running fraud-monitoring system.
+
+---
+
+# 🔍 Explainable Fraud Detection
+
+Every scored transaction can be inspected through its corresponding case.
+
+The case view provides:
+
+- Overall risk score
+- Risk classification
+- Recommended action
+- Model prediction
+- Top contributing features
+- SHAP contribution values
+- Transaction metadata
+
+The SHAP results are displayed as an interactive horizontal bar chart, allowing analysts to quickly identify which features pushed the transaction toward or away from a fraud classification.
+
+---
+
+# 👥 Role-Based Access
+
+FraudSense provides separate experiences for different users.
+
+| User         | Capabilities                                                                                              |
+| ------------ | --------------------------------------------------------------------------------------------------------- |
+| **Analyst**  | Full fraud dashboard, case review, SHAP explanations, batch uploads, live simulation, portfolio analytics |
+| **Merchant** | Own transactions, basic transaction statistics, and simplified Low/Medium/High risk indicators            |
+
+### Seed Credentials
+
+| Role     | Email                      | Password      |
+| -------- | -------------------------- | ------------- |
+| Analyst  | `analyst1@fraudsense.com`  | `password123` |
+| Merchant | `merchant1@fraudsense.com` | `password123` |
+
+---
+
+# 🧑‍💻 Human-in-the-Loop MLOps
+
+FraudSense incorporates analyst feedback into its monitoring workflow.
+
+When an analyst reviews a detected case, they can classify it as:
+
+- **Confirmed Fraud**
+- **False Positive**
+
+These decisions are persisted and used to recalculate portfolio-level model performance metrics such as:
+
+- Precision
+- Recall
+- Fraud detection performance
+
+This creates a simplified **human-in-the-loop MLOps feedback cycle**, where analyst decisions become part of the system's ongoing model evaluation.
+
+---
+
+# 🗄️ Database Architecture
+
+FraudSense supports two database configurations.
+
+### Docker Environment
+
+```text
+PostgreSQL 15
+localhost:5432
+```
+
+Docker Compose automatically starts the PostgreSQL service alongside the backend and frontend.
+
+### Local Development
+
+When Docker/PostgreSQL is unavailable, the backend falls back to:
+
+```text
+backend/fraudsense.db
+```
+
+using SQLite.
+
+---
+
+# 🚀 Running with Docker Compose
+
+Docker Compose is the recommended way to run the complete application.
+
+First, ensure **Docker Desktop is running**, then execute from the project root:
+
 ```bash
 docker compose up --build
 ```
-This automatically boots:
-1. `db`: PostgreSQL 15 database on `localhost:5432`.
-2. `backend`: FastAPI API server on `localhost:8000` (automatically runs migrations, splits dataset, trains ML model, and seeds database on first boot).
-3. `frontend`: React Vite application running on `http://localhost:5173`.
 
-### Method 2: Manual Local Fallback (No Docker)
-If Docker is unavailable, you can start frontend and backend services directly on your local shell:
+This starts three services:
 
-#### 1. Setup & Train Backend
+```text
+┌─────────────────────────────┐
+│        Frontend             │
+│    React + Vite             │
+│    localhost:5173           │
+└──────────────┬──────────────┘
+               │
+               ↓
+┌─────────────────────────────┐
+│        Backend              │
+│   FastAPI + ML Pipeline     │
+│    localhost:8000           │
+└──────────────┬──────────────┘
+               │
+               ↓
+┌─────────────────────────────┐
+│        PostgreSQL           │
+│    localhost:5432           │
+└─────────────────────────────┘
+```
+
+On the first backend startup, the application automatically:
+
+1. Creates database tables.
+2. Splits the dataset.
+3. Trains the ML models.
+4. Saves the trained artifacts.
+5. Seeds the initial user accounts.
+6. Starts the FastAPI server.
+
+---
+
+# 🧪 Running Without Docker
+
+## Backend
+
 ```bash
 cd backend
-# Install dependencies
+
 pip install -r requirements.txt
 
-# Run dataset splitting & model training (takes ~1.5 mins)
 python -m app.ml.train_fraud_model
 
-# Run database table migrations and seed user accounts
 python -m app.seed
 
-# Start FastAPI server (runs SQLite fallback)
 python -m uvicorn app.main:app --reload --port 8000
 ```
 
-#### 2. Start Frontend console
+The backend will be available at:
+
+```text
+http://localhost:8000
+```
+
+## Frontend
+
+Open another terminal:
+
 ```bash
 cd frontend
-# Install packages
+
 npm install
 
-# Start Vite React server
 npm run dev
+```
+
+The frontend will be available at:
+
+```text
+http://localhost:5173
 ```
 
 ---
 
-## Port Map & Credentials
+# 🌐 Application Endpoints
 
-- **Frontend Interface**: [http://localhost:5173](http://localhost:5173)
-- **Backend API & Swagger Documentation**: [http://localhost:8000/docs](http://localhost:8000/docs)
-- **Database Engine**: PostgreSQL on `localhost:5432` / SQLite local fallback at `backend/fraudsense.db`
+| Service                   | URL                          |
+| ------------------------- | ---------------------------- |
+| Frontend                  | `http://localhost:5173`      |
+| FastAPI Backend           | `http://localhost:8000`      |
+| Swagger API Documentation | `http://localhost:8000/docs` |
+| PostgreSQL                | `localhost:5432`             |
 
-### Seed Credentials
-| User Type | Email | Password | Role / Views |
-|---|---|---|---|
-| **Analyst** | `analyst1@fraudsense.com` | `password123` | Full dashboard, cases review, raw SHAP bar charts, batch upload, live simulator |
-| **Merchant** | `merchant1@fraudsense.com` | `password123` | Own transactions, basic stats, sanitized risk badges (Low/Medium/High) |
+The Swagger interface can be used to explore and test the backend REST API interactively.
 
 ---
 
-## Key Interface Differentiators
-- **Simulation Console**: Pressing **Simulate Live Transaction** on the Analyst Feed calls `/simulate-live` to randomly pull an unused row from `incoming_pool.csv`, score it, and instantly broadcast it to all connected analyst monitors using WebSockets.
-- **Visual Explainability (SHAP)**: Clicking into any case renders a customized horizontal bar chart showing how raw PCA factors and transaction amounts affected the threat score.
-- **Human-in-the-Loop MLOps**: Resolving cases as either a "False Positive" or "Confirmed Fraud" automatically recalculates overall model Precision and Recall coefficients inside Portfolio Analytics.
+# ⭐ Key Features
+
+### Real-Time Fraud Detection
+
+Processes transactions and generates risk scores in real time.
+
+### Hybrid ML Detection
+
+Combines supervised fraud classification with unsupervised anomaly detection.
+
+### Explainable AI
+
+Uses SHAP to show analysts why a transaction was considered suspicious.
+
+### WebSocket-Based Monitoring
+
+Pushes newly detected transactions to connected analyst dashboards without requiring continuous polling.
+
+### Automated Risk Actions
+
+Maps transaction risk to actions such as hold, review, or block.
+
+### Role-Based Dashboards
+
+Provides different levels of information and functionality for analysts and merchants.
+
+### Case Management
+
+Allows analysts to investigate and classify suspicious transactions.
+
+### Batch Processing
+
+Supports batch transaction uploads for large-scale evaluation.
+
+### Human-in-the-Loop Feedback
+
+Uses analyst case decisions to update portfolio-level Precision and Recall metrics.
+
+### Dockerized Deployment
+
+Provides a reproducible multi-service environment using Docker Compose.
+
+---
+
+# 📌 Project Architecture at a Glance
+
+```text
+                    ┌──────────────────┐
+                    │   React Client   │
+                    │ React + TS/Vite  │
+                    └────────┬─────────┘
+                             │
+                     REST / WebSocket
+                             │
+                             ▼
+                    ┌──────────────────┐
+                    │   FastAPI API    │
+                    │ Authentication   │
+                    │ Business Logic   │
+                    └───────┬──────────┘
+                            │
+              ┌─────────────┼─────────────┐
+              ▼             ▼             ▼
+       ┌────────────┐ ┌────────────┐ ┌────────────┐
+       │ ML Engine  │ │ PostgreSQL │ │ WebSockets │
+       │ XGBoost    │ │ / SQLite   │ │ Live Feed  │
+       │ IsoForest  │ └────────────┘ └────────────┘
+       │ SHAP       │
+       └────────────┘
+```
+
+FraudSense therefore combines **machine learning, explainable AI, REST APIs, real-time WebSockets, database persistence, role-based access, and containerized deployment** into a single end-to-end fraud detection platform.
