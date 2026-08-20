@@ -1,39 +1,173 @@
+/* -------------------------------------------------------------
+   TAILWIND CSS DIRECTIVES
+   ------------------------------------------------------------- */
+
+/* Includes Tailwind's base styles and CSS reset */
 @tailwind base;
+
+/* Includes Tailwind component classes */
 @tailwind components;
+
+/* Includes Tailwind utility classes */
 @tailwind utilities;
 
+/* -------------------------------------------------------------
+   GLOBAL BODY STYLES
+   ------------------------------------------------------------- */
+
 body {
+  /* Remove the browser's default margin */
   margin: 0;
-  font-family: 'Outfit', 'Inter', system-ui, -apple-system, sans-serif;
-  background-color: #0B0F19; /* Deep charcoal/navy dark space */
-  color: #F1F5F9;
+
+  /*
+    Define the default font stack.
+
+    The browser will try:
+    1. Outfit
+    2. Inter
+    3. System default UI font
+    4. Apple's system font
+    5. Generic sans-serif font
+  */
+  font-family:
+    "Outfit",
+    "Inter",
+    system-ui,
+    -apple-system,
+    sans-serif;
+
+  /* Set the application's main dark background color */
+  background-color: #0b0f19;
+
+  /* Set the default text color to a light gray */
+  color: #f1f5f9;
+
+  /*
+    Prevent horizontal scrolling.
+
+    This is useful when elements, animations, or layouts
+    accidentally extend beyond the viewport width.
+  */
   overflow-x: hidden;
 }
 
-/* Glassmorphism utility cards */
+/* -------------------------------------------------------------
+   GLASSMORPHISM PANEL UTILITY
+   ------------------------------------------------------------- */
+
+/*
+  Creates a reusable glass-like UI effect.
+
+  This class can be applied to cards, dashboards,
+  modals, panels, etc.
+*/
 .glass-panel {
+  /*
+    Semi-transparent dark background.
+
+    The alpha value (0.75) allows some of the background
+    behind the element to remain visible.
+  */
   background: rgba(22, 28, 45, 0.75);
+
+  /*
+    Blur the content behind the element.
+
+    This creates the main "glassmorphism" effect.
+  */
   backdrop-filter: blur(12px);
+
+  /*
+    Safari/WebKit version of backdrop-filter
+    for better browser compatibility.
+  */
   -webkit-backdrop-filter: blur(12px);
+
+  /*
+    Add a subtle transparent border to give
+    the glass panel some visual separation.
+  */
   border: 1px solid rgba(255, 255, 255, 0.05);
 }
 
+/* -------------------------------------------------------------
+   GLASS PANEL HOVER EFFECT
+   ------------------------------------------------------------- */
+
+/*
+  Applies an interactive hover effect.
+
+  Use this class together with .glass-panel:
+
+  className="glass-panel glass-panel-hover"
+*/
 .glass-panel-hover:hover {
+  /* Make the border slightly more visible on hover */
   border-color: rgba(255, 255, 255, 0.1);
+
+  /*
+    Add a shadow to make the panel appear elevated
+    above the background.
+  */
   box-shadow: 0 8px 24px -4px rgba(0, 0, 0, 0.5);
+
+  /*
+    Move the panel slightly upward when the user
+    hovers over it.
+  */
   transform: translateY(-2px);
+
+  /*
+    Smoothly animate all changed properties.
+
+    Duration: 0.2 seconds
+    Timing: cubic-bezier for a smooth natural transition
+  */
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
+/* -------------------------------------------------------------
+   SLOW PULSE ANIMATION UTILITY
+   ------------------------------------------------------------- */
+
+/*
+  Creates a reusable slow pulsing effect.
+
+  Example:
+  className="animate-pulse-slow"
+*/
 .animate-pulse-slow {
+  /*
+    Apply the "pulse" animation.
+
+    Duration: 3 seconds
+    Timing function: cubic-bezier
+    Repeat: infinitely
+  */
   animation: pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
 
+/* -------------------------------------------------------------
+   CUSTOM PULSE ANIMATION
+   ------------------------------------------------------------- */
+
+/*
+  Defines how the "pulse" animation behaves.
+
+  The animation changes the element's opacity:
+  - Fully visible at the start
+  - Semi-transparent halfway through
+  - Fully visible again at the end
+*/
 @keyframes pulse {
-  0%, 100% {
+  /* Starting and ending state */
+  0%,
+  100% {
     opacity: 1;
   }
+
+  /* Middle state */
   50% {
-    opacity: .5;
+    opacity: 0.5;
   }
 }
