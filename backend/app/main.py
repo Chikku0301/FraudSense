@@ -21,61 +21,15 @@ from backend.app.seed import seed_db
 from backend.app.routers import auth, merchant, analyst
 
 
-# Create the main FastAPI application instance.
-# Metadata such as title, description, and version will appear in the
-# automatically generated Swagger documentation.
-app = FastAPI(
-    title="FraudSense API",
-    description="Real-time transaction fraud detection and risk monitoring API.",
-    version="1.0.0"
-)
+from contextlib import asynccontextmanager
 
-
-# Configure CORS (Cross-Origin Resource Sharing).
-# This allows the React frontend running on localhost:5173
-# to send requests to this FastAPI backend.
-app.add_middleware(
-    CORSMiddleware,
-    
-    # Allow requests only from the local React/Vite frontend.
-    allow_origins=["http://localhost:5173"],
-    
-    # Allow cookies and authentication credentials to be sent.
-    allow_credentials=True,
-    
-    # Allow all HTTP methods such as GET, POST, PUT, DELETE, etc.
-    allow_methods=["*"],
-    
-    # Allow all request headers.
-    allow_headers=["*"],
-)
-
-
-# Register authentication-related API endpoints.
-# Example: /api/v1/login, /api/v1/register
-app.include_router(auth.router, prefix="/api/v1")
-
-# Register merchant-related API endpoints.
-# Example: /api/v1/transactions
-app.include_router(merchant.router, prefix="/api/v1")
-
-# Register analyst-related API endpoints.
-# Example: /api/v1/alerts or fraud analysis endpoints
-app.include_router(analyst.router, prefix="/api/v1")
-
-
-# This function runs automatically when the FastAPI application starts.
-@app.on_event("startup")
-def on_startup():
-    
+@asynccontextmanager
+async def lifespan(app: FastAPI):
     # Create all database tables defined using SQLAlchemy models.
-    # Tables are created only if they do not already exist.
     print("[Startup] Initializing database tables...")
     Base.metadata.create_all(bind=engine)
 
-    
     # Check whether the trained ML model files already exist.
-    # If either model is missing, automatically run the training pipeline.
     if not (
         os.path.exists(XGB_MODEL_PATH)
         and os.path.exists(IFOREST_MODEL_PATH)
@@ -84,31 +38,44 @@ def on_startup():
             "[Startup] Model artifacts not found. "
             "Running training pipeline..."
         )
-
         try:
-            # Train the fraud detection models and save them.
             run_training_pipeline()
-
         except Exception as e:
-            # Print the error if model training fails.
-            print(
-                f"[Startup] Failed to run training pipeline automatically: {e}"
-            )
-
-            # Re-raise the exception so the application startup fails visibly.
+            print(f"[Startup] Failed to run training pipeline automatically: {e}")
             raise e
 
-
     # Seed the database with initial data.
-    # This may include sample users, merchants, transactions, etc.
     print("[Startup] Seeding database...")
-
     try:
         seed_db()
-
     except Exception as e:
-        # Log the error, but do not stop the entire application.
         print(f"[Startup] Seeding failed: {e}")
+
+    yield
+
+
+# Create the main FastAPI application instance.
+app = FastAPI(
+    title="FraudSense API",
+    description="Real-time transaction fraud detection and risk monitoring API.",
+    version="1.0.0",
+    lifespan=lifespan
+)
+
+# Configure CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Register API endpoints
+app.include_router(auth.router, prefix="/api/v1")
+app.include_router(merchant.router, prefix="/api/v1")
+app.include_router(analyst.router, prefix="/api/v1")
+
 
 
 # Define the root endpoint of the API.

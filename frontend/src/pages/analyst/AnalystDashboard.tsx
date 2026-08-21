@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import api from '../../api'
 import { useAuth } from '../../context/AuthContext'
-import { useWebSocket, SimulatedTransaction } from '../../context/WebSocketContext'
+import { useWebSocket } from '../../context/WebSocketContext'
 import { 
   Shield, 
   Activity, 
@@ -14,7 +14,6 @@ import {
   CheckCircle2, 
   TrendingUp, 
   Zap, 
-  ArrowRight,
   LogOut,
   Calendar,
   Layers,
@@ -50,7 +49,6 @@ export const AnalystDashboard: React.FC = () => {
 
   // Simulation state
   const [simulating, setSimulating] = useState(false)
-  const [simulationResult, setSimulationResult] = useState<any>(null)
 
   // Ingestion state
   const [uploadFile, setUploadFile] = useState<File | null>(null)
@@ -124,10 +122,8 @@ export const AnalystDashboard: React.FC = () => {
   // Simulate a transaction
   const triggerSimulation = async () => {
     setSimulating(true)
-    setSimulationResult(null)
     try {
-      const res = await api.post('/analyst/simulate-live')
-      setSimulationResult(res.data)
+      await api.post('/analyst/simulate-live')
       // Refresh transactions ledger
       await fetchData()
     } catch (err) {
