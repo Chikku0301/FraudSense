@@ -14,11 +14,21 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# add your model's MetaData object here
-# for 'autogenerate' support
-# from myapp import mymodel
-# target_metadata = mymodel.Base.metadata
-target_metadata = None
+import sys
+import os
+
+# Add project root to sys.path
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
+
+from backend.app.database import Base
+from backend.app.models import User, Transaction, FraudAssessment, Case, AuditLog
+from backend.app.config import DATABASE_URL
+
+# Set target metadata for 'autogenerate'
+target_metadata = Base.metadata
+
+# Override sqlalchemy.url with configuration from config.py / env
+config.set_main_option("sqlalchemy.url", DATABASE_URL)
 
 # other values from the config, defined by the needs of env.py,
 # can be acquired:

@@ -227,108 +227,43 @@ This creates a simplified **human-in-the-loop MLOps feedback cycle**, where anal
 
 # 🗄️ Database Architecture
 
-FraudSense supports two database configurations.
-
-### Docker Environment
-
-```text
-PostgreSQL 15
-localhost:5432
-```
-
-Docker Compose automatically starts the PostgreSQL service alongside the backend and frontend.
-
-### Local Development
-
-When Docker/PostgreSQL is unavailable, the backend falls back to:
+The application stores transaction records, ML scores, cases, and audit logs locally in SQLite:
 
 ```text
 backend/fraudsense.db
 ```
 
-using SQLite.
-
 ---
 
-# 🚀 Running with Docker Compose
+# 🚀 Running the Application Locally
 
-Docker Compose is the recommended way to run the complete application.
+## 1. Backend
 
-First, ensure **Docker Desktop is running**, then execute from the project root:
-
-```bash
-docker compose up --build
-```
-
-This starts three services:
-
-```text
-┌─────────────────────────────┐
-│        Frontend             │
-│    React + Vite             │
-│    localhost:5173           │
-└──────────────┬──────────────┘
-               │
-               ↓
-┌─────────────────────────────┐
-│        Backend              │
-│   FastAPI + ML Pipeline     │
-│    localhost:8000           │
-└──────────────┬──────────────┘
-               │
-               ↓
-┌─────────────────────────────┐
-│        PostgreSQL           │
-│    localhost:5432           │
-└─────────────────────────────┘
-```
-
-On the first backend startup, the application automatically:
-
-1. Creates database tables.
-2. Splits the dataset.
-3. Trains the ML models.
-4. Saves the trained artifacts.
-5. Seeds the initial user accounts.
-6. Starts the FastAPI server.
-
----
-
-# 🧪 Running Without Docker
-
-## Backend
+Open a terminal in `backend/`:
 
 ```bash
 cd backend
-
 pip install -r requirements.txt
-
-python -m app.ml.train_fraud_model
-
-python -m app.seed
-
 python -m uvicorn app.main:app --reload --port 8000
 ```
 
-The backend will be available at:
+The backend automatically initializes tables, runs training if artifacts are missing, seeds initial accounts, and serves the API at:
 
 ```text
 http://localhost:8000
 ```
 
-## Frontend
+## 2. Frontend
 
-Open another terminal:
+Open another terminal in `frontend/`:
 
 ```bash
 cd frontend
-
 npm install
-
 npm run dev
 ```
 
-The frontend will be available at:
+The React + TypeScript application will be available at:
 
 ```text
 http://localhost:5173
@@ -338,12 +273,12 @@ http://localhost:5173
 
 # 🌐 Application Endpoints
 
-| Service                   | URL                          |
-| ------------------------- | ---------------------------- |
-| Frontend                  | `http://localhost:5173`      |
-| FastAPI Backend           | `http://localhost:8000`      |
+| Service | URL |
+| :--- | :--- |
+| Frontend | `http://localhost:5173` |
+| FastAPI Backend | `http://localhost:8000` |
 | Swagger API Documentation | `http://localhost:8000/docs` |
-| PostgreSQL                | `localhost:5432`             |
+| Live WebSocket Feed | `ws://localhost:8000/api/v1/analyst/live-feed` |
 
 The Swagger interface can be used to explore and test the backend REST API interactively.
 

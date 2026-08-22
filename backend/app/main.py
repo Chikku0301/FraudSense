@@ -1,24 +1,31 @@
+import sys
 import os
+
+# Ensure both backend directory and project root directory are on sys.path
+_current_dir = os.path.dirname(os.path.abspath(__file__))
+_backend_dir = os.path.dirname(_current_dir)
+_root_dir = os.path.dirname(_backend_dir)
+
+for _p in [_root_dir, _backend_dir]:
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 # Import database metadata and database engine.
-# Base contains the SQLAlchemy model metadata used to create database tables.
-# engine manages the connection between the application and the database.
-from backend.app.database import Base, engine
-
-# Import paths where the trained ML model files are stored.
-from backend.app.config import XGB_MODEL_PATH, IFOREST_MODEL_PATH
-
-# Import the function responsible for training the fraud detection models.
-from backend.app.ml.train_fraud_model import run_training_pipeline
-
-# Import the function used to insert initial/sample data into the database.
-from backend.app.seed import seed_db
-
-# Import API routers.
-# Each router contains endpoints related to a specific part of the application.
-from backend.app.routers import auth, merchant, analyst
+try:
+    from backend.app.database import Base, engine
+    from backend.app.config import XGB_MODEL_PATH, IFOREST_MODEL_PATH
+    from backend.app.ml.train_fraud_model import run_training_pipeline
+    from backend.app.seed import seed_db
+    from backend.app.routers import auth, merchant, analyst
+except ImportError:
+    from app.database import Base, engine
+    from app.config import XGB_MODEL_PATH, IFOREST_MODEL_PATH
+    from app.ml.train_fraud_model import run_training_pipeline
+    from app.seed import seed_db
+    from app.routers import auth, merchant, analyst
 
 
 from contextlib import asynccontextmanager
